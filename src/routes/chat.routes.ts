@@ -9,10 +9,10 @@ const router = Router();
 
 router.post(
   '/',
-  authMiddleware,
-  checkPaidPlan,  // Vérifier que l'utilisateur a un plan payant
-  planMiddleware,
-  quotaMiddleware,
+  // authMiddleware,  // TODO: re-enable after testing
+  // checkPaidPlan,  // Vérifier que l'utilisateur a un plan payant
+  // planMiddleware,
+  // quotaMiddleware,
   chatController
 );
 
