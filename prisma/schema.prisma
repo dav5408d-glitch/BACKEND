@@ -3,10 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}   
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
@@ -55,7 +54,7 @@ model Message {
   id             String   @id @default(uuid())
   conversationId String   @map("conversation_id")
   role           String
-  content        String   @db.Text
+  content        String
   aiUsed         String?  @map("ai_used")
   tokensUsed     Int?     @map("tokens_used")
   costUSD        Float?   @map("cost_usd")
@@ -75,7 +74,7 @@ model Usage {
   totalTokens  Int     @default(0) @map("total_tokens")
   totalCostUSD Float   @default(0) @map("total_cost_usd")
   requests     Int     @default(0)
-  aiBreakdown  Json?   @map("ai_breakdown")
+  aiBreakdown  String? @map("ai_breakdown")
   createdAt    DateTime @default(now()) @map("created_at")
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

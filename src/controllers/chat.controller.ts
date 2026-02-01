@@ -1,15 +1,11 @@
-import { routerService } from '../services/router.service';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
+import { ollamaGenerate, ollamaChat } from '../services/ollama.service';
 
 export async function chatController(req: any, res: any) {
-  const { message, image, imageUrl, searchWeb, conversationId } = req.body;
+  const { message, image, imageUrl, conversationId } = req.body;
   const userId = req.user?.userId;
-  const userPlan = req.user?.plan || 'FREE';
 
   console.log('🔔 Chat request received');
-  console.log('User:', userId, 'Plan:', userPlan);
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'Message required and must be a string' });
@@ -20,120 +16,91 @@ export async function chatController(req: any, res: any) {
   }
 
   try {
-    console.log('💬 Processing message...');
+    console.log('💬 Processing message with Ollama...');
 
-    // Get or create conversation
-    let conversation;
-    if (conversationId) {
-      conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        include: { messages: { orderBy: { createdAt: 'asc' } } }
-      });
-
-      if (!conversation || conversation.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized' });
+    // Save user message if authenticated (TEMPORARILY DISABLED FOR TESTING)
+    let currentConvId = conversationId;
+    if (userId && userId !== 'beta-user') {
+      console.log(`👤 Authenticated user: ${userId}`);
+      if (!currentConvId) {
+        currentConvId = `temp-${userId}-${Date.now()}`;
+        console.log(`💬 Using temporary conversation ID: ${currentConvId}`);
       }
+      // TODO: Fix database saving later
+      console.log(`� Database saving temporarily disabled`);
     } else {
-      conversation = await prisma.conversation.create({
-        data: {
-          userId,
-          title: message.substring(0, 50) + (message.length > 50 ? '...' : '')
-        }
-      });
+      // For guest users, use a temporary conversation ID
+      currentConvId = `guest-${Date.now()}`;
+      console.log(`👤 Guest user using temporary conversation ID: ${currentConvId}`);
     }
 
-    // Charger l'historique de la conversation courante (6 derniers messages)
-    const historyMessages = await prisma.message.findMany({
-      where: { conversationId: conversation.id },
-      orderBy: { createdAt: 'desc' },
-      take: 6
-    });
-    // On les remet dans l'ordre chronologique
-    const conversationHistory = historyMessages.reverse().map(m => ({ role: m.role, content: m.content }));
+    // Use Ollama directly with history support
+    const model = process.env.OLLAMA_MODEL || 'mistral';
 
-    // Route message to best AI
-    const result = await routerService.handleMessageLocal({
-      message,
-      user: req.user,
-      image,
-      imageUrl,
-      searchWeb: searchWeb && userPlan !== 'FREE',
-      requestCount: req.quota?.used || 0,
-      conversationHistory,
-    });
+    // Build conversation history for context
+    let messages: any[] = [];
+    
+    // If we have conversation history from frontend, use it
+    if (req.body.history && Array.isArray(req.body.history)) {
+      messages = req.body.history.map((m: any) => ({
+        role: m.role || 'user',
+        content: m.content || ''
+      }));
+    } else if (currentConvId && userId) {
+      // Load conversation from database if no history provided
+      const conversationMessages = await prisma.message.findMany({
+        where: { conversationId: currentConvId },
+        orderBy: { createdAt: 'asc' },
+        take: 20 // Limit to last 20 messages for context
+      });
+      
+      messages = conversationMessages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+    }
+    
+    // Add current message
+    messages.push({ role: 'user', content: message });
 
-    // Save message to DB
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'user',
-        content: message,
-        hasImage: !!image || !!imageUrl
-      }
-    });
+    console.log(`📝 Context: ${messages.length} messages for model ${model}`);
 
-    // Save AI response
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'assistant',
-        content: result.response || '',
-        aiUsed: result.aiUsed,
-        tokensUsed: result.tokensUsed,
-        costUSD: result.costUSD
-      }
-    });
+    const response = await ollamaChat(messages, model);
 
-    // Update usage
-    const today = new Date().toISOString().split('T')[0];
-    const todayDate = new Date(today);
-
-    await prisma.usage.upsert({
-      where: {
-        userId_date: {
-          userId,
-          date: todayDate
-        }
-      },
-      create: {
-        userId,
-        date: todayDate,
-        requests: 1,
-        totalTokens: result.tokensUsed || 0,
-        totalCostUSD: result.costUSD || 0
-      },
-      update: {
-        requests: { increment: 1 },
-        totalTokens: { increment: result.tokensUsed || 0 },
-        totalCostUSD: { increment: result.costUSD || 0 }
-      }
-    });
+    // Save AI message if authenticated (TEMPORARILY DISABLED FOR TESTING)
+    if (userId && userId !== 'beta-user' && currentConvId && !currentConvId.startsWith('guest-')) {
+      console.log(`📝 AI response saving temporarily disabled`);
+    } else {
+      console.log(`👤 Guest response not saved to database`);
+    }
 
     console.log('✅ Response sent successfully');
     res.json({
-      ...result,
-      conversationId: conversation.id
+      response: response,
+      aiUsed: `Ollama (${model})`,
+      providerKey: 'ollama',
+      costUSD: 0,
+      chargedUSD: 0,
+      tokensUsed: 0,
+      mode: 'LOCAL_LLM',
+      conversationId: currentConvId
     });
   } catch (error: any) {
     console.error('❌ Error in chatController:', error.message);
+
+    // Friendly error message
+    const errorMsg = error.message.includes('ECONNREFUSED')
+      ? "🤖 Ollama n'est pas démarré. Lancez 'ollama serve' dans un terminal."
+      : `❌ Erreur: ${error.message}`;
+
     res.status(200).json({
-      response: "🤖 L’IA est en train de se réveiller… Revenez dans quelques instants ou testez une démo ci-dessous !",
-      aiUsed: "TEMPORARY",
+      response: errorMsg,
+      aiUsed: "Error",
       providerKey: "none",
-      intent: {},
       costUSD: 0,
       chargedUSD: 0,
-      webSearchUsed: false,
-      webSearchResults: null,
-      planUsed: req.user?.plan || 'FREE',
-      optimizationApplied: false,
-      mode: 'TEMPORARY',
-      requestCount: 0,
-      totalLimit: 0,
-      dailyCost: 0,
-      remainingBudget: 0,
       tokensUsed: 0,
-      conversationId: conversationId || null
+      mode: 'ERROR'
     });
   }
 }

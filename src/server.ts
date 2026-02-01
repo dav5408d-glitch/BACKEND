@@ -6,7 +6,7 @@ dotenv.config();
 import app from './app';
 import { logAvailableProviders, validateProvidersConfig } from './services/providersAvailability.service';
 
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3003;
 
 // Validate and log available providers
 if (!validateProvidersConfig()) {
