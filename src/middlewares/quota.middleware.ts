@@ -1,4 +1,6 @@
-import { prisma } from '../config/database';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const REQUEST_LIMITS: Record<string, number> = {
   'FREE': 5,

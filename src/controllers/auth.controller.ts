@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
-import { prisma } from '../config/database';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // Validation email regex
 const isValidEmail = (email: string): boolean => {

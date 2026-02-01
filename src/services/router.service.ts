@@ -395,288 +395,274 @@ function pickOptimalProvider(
 
 export const routerService = {
   async handleMessage({ message, user, searchWeb, requestCount }: any) {
-    console.log('\n====== 🔄 MESSAGE ROUTING START ======');
-    console.log('📨 Message:', message.substring(0, 60) + '...');
-    console.log('👤 User:', user?.email);
+      console.log('\n====== 🔄 MESSAGE ROUTING START ======');
+      console.log('📨 Message:', message.substring(0, 60) + '...');
+      console.log('👤 User:', user?.email);
 
-    // Détection du provider forcé via mot-clé (ex: (GPT), (HG), (MISTRAL), ...)
-    let forcedProviderKey: string | null = null;
-    let cleanedMessage = message;
-    const providerMatch = message.match(/^\(([^)]+)\)/);
-    if (providerMatch) {
-      const keyword = providerMatch[1].toUpperCase();
-      switch (keyword) {
-        case 'GPT':
-          forcedProviderKey = 'openai';
-          break;
-        case 'HG':
-          forcedProviderKey = 'huggingface';
-          break;
-        case 'MISTRAL':
-          forcedProviderKey = 'mistral';
-          break;
-        case 'DEEPSEEK':
-          forcedProviderKey = 'deepseek';
-          break;
-        case 'CLAUDE':
-          forcedProviderKey = 'claude';
-          break;
-        // Ajoute d'autres IA ici si besoin
-        default:
-          forcedProviderKey = null;
+      // Détection du provider forcé via mot-clé (ex: (GPT), (HG), (MISTRAL), ...)
+      let forcedProviderKey: string | null = null;
+      let cleanedMessage = message;
+      const providerMatch = message.match(/^\(([^)]+)\)/);
+      if (providerMatch) {
+        const keyword = providerMatch[1].toUpperCase();
+        switch (keyword) {
+          case 'GPT':
+            forcedProviderKey = 'openai';
+            break;
+          case 'HG':
+            forcedProviderKey = 'huggingface';
+            break;
+          case 'MISTRAL':
+            forcedProviderKey = 'mistral';
+            break;
+          case 'DEEPSEEK':
+            forcedProviderKey = 'deepseek';
+            break;
+          case 'CLAUDE':
+            forcedProviderKey = 'claude';
+            break;
+          // Ajoute d'autres IA ici si besoin
+          default:
+            forcedProviderKey = null;
+        }
+        cleanedMessage = message.replace(/^\([^)]+\)\s*/, '');
       }
-      cleanedMessage = message.replace(/^\([^)]+\)\s*/, '');
-    }
 
-    // Validate plan
-    const plan = (user && (user.plan || user.planType)) || 'FREE';
-    console.log('📊 Plan:', plan);
+      // Validate plan
+      const plan = (user && (user.plan || user.planType)) || 'FREE';
+      console.log('📊 Plan:', plan);
 
-    // FREE users are now allowed with limited access to low-tier providers
+      // FREE users are now allowed with limited access to low-tier providers
 
-    // Check request limit
-    const totalLimit = getTotalRequestLimit(plan);
-    const premiumLimit = getPremiumRequestLimit(plan);
-    const currentRequestCount = requestCount || 0;
-    const isInCheapMode = currentRequestCount >= premiumLimit;
+      // Check request limit
+      const totalLimit = getTotalRequestLimit(plan);
+      const premiumLimit = getPremiumRequestLimit(plan);
+      const currentRequestCount = requestCount || 0;
+      const isInCheapMode = currentRequestCount >= premiumLimit;
 
-    console.log(`📊 Request count: ${currentRequestCount}/${totalLimit}, Premium limit: ${premiumLimit}`);
-    console.log(`💰 Mode: ${isInCheapMode ? 'SMART ROUTING (cheap)' : 'PREMIUM'}`);
+      console.log(`📊 Request count: ${currentRequestCount}/${totalLimit}, Premium limit: ${premiumLimit}`);
+      console.log(`💰 Mode: ${isInCheapMode ? 'SMART ROUTING (cheap)' : 'PREMIUM'}`);
 
-    // Get plan features
-    const planFeatures = getPlanFeatures(plan);
-    console.log('✨ Plan features enabled:', {
-      webSearch: planFeatures.webSearch,
-      imageAnalysis: planFeatures.imageAnalysis,
-      priorityQueue: planFeatures.priorityQueue
-    });
+      // Get plan features
+      const planFeatures = getPlanFeatures(plan);
+      console.log('✨ Plan features enabled:', {
+        webSearch: planFeatures.webSearch,
+        imageAnalysis: planFeatures.imageAnalysis,
+        priorityQueue: planFeatures.priorityQueue
+      });
 
-    // Advanced intent analysis
-    const intent = analyzeIntentAdvanced(cleanedMessage);
-    console.log('🧠 Intent:', { domain: intent.domain, complexity: intent.complexity, isPremiumWorthy: intent.isPremiumWorthy });
+      // Advanced intent analysis
+      const intent = analyzeIntentAdvanced(cleanedMessage);
+      console.log('🧠 Intent:', { domain: intent.domain, complexity: intent.complexity, isPremiumWorthy: intent.isPremiumWorthy });
 
-    // Web search handling
-    const allowWebSearch = searchWeb && planFeatures.webSearch;
-    if (searchWeb && !planFeatures.webSearch) {
-      console.log('⚠️  Web search not available for this plan');
-    }
-
-    // Get allowed providers for plan (ONLY ENABLED ONES)
-    const allowedTiers = allowedTiersForPlan(plan);
-    const allProvidersForTier = PROVIDERS.filter(p => allowedTiers.includes(p.tier));
-
-    // Filter to only enabled providers
-    let allowedProviders = allProvidersForTier.filter(p => {
-      const availability = getAvailableProviders().find(ap => ap.key === p.key);
-      return availability?.enabled || false;
-    });
-
-    if (!allowedProviders.length) {
-      const available = getEnabledProviders();
-      console.warn(`⚠️  No ${plan} providers enabled, falling back to available providers`);
-      if (available.length === 0) {
-        throw new Error('No providers available! Please configure at least one API key in .env');
+      // Web search handling
+      const allowWebSearch = searchWeb && planFeatures.webSearch;
+      if (searchWeb && !planFeatures.webSearch) {
+        console.log('⚠️  Web search not available for this plan');
       }
-      // Use the enabled providers regardless of tier
-      const fallbackProviders = available.map(ap => PROVIDERS.find(p => p.key === ap.key)).filter((p): p is typeof PROVIDERS[0] => !!p);
-      console.log('🔄 Using fallback providers:', fallbackProviders.map(p => p.name).join(', '));
-      allowedProviders.push(...fallbackProviders);
-    }
 
-    console.log('🤖 Enabled providers for plan:', allowedProviders.map(p => `${p.name}(${p.tier})`).join(', '));
+      // Get allowed providers for plan (ONLY ENABLED ONES)
+      const allowedTiers = allowedTiersForPlan(plan);
+      const allProvidersForTier = PROVIDERS.filter(p => allowedTiers.includes(p.tier));
+    
+      // Filter to only enabled providers
+      let allowedProviders = allProvidersForTier.filter(p => {
+        const availability = getAvailableProviders().find(ap => ap.key === p.key);
+        return availability?.enabled || false;
+      });
 
-    // Sélection du provider forcé si mot-clé détecté
-    let provider;
-    if (forcedProviderKey) {
-      provider = allowedProviders.find(p => p.key === forcedProviderKey);
-      if (!provider) {
-        console.warn(`⚠️  Provider forcé (${forcedProviderKey}) non disponible pour ce plan, routage normal.`);
-        provider = pickOptimalProvider(intent, allowedProviders, plan, isInCheapMode);
+      if (!allowedProviders.length) {
+        const available = getEnabledProviders();
+        console.warn(`⚠️  No ${plan} providers enabled, falling back to available providers`);
+        if (available.length === 0) {
+          throw new Error('No providers available! Please configure at least one API key in .env');
+        }
+        // Use the enabled providers regardless of tier
+        const fallbackProviders = available.map(ap => PROVIDERS.find(p => p.key === ap.key)).filter((p): p is typeof PROVIDERS[0] => !!p);
+        console.log('🔄 Using fallback providers:', fallbackProviders.map(p => p.name).join(', '));
+        allowedProviders.push(...fallbackProviders);
+      }
+
+      console.log('🤖 Enabled providers for plan:', allowedProviders.map(p => `${p.name}(${p.tier})`).join(', '));
+
+      // Sélection du provider forcé si mot-clé détecté
+      let provider;
+      if (forcedProviderKey) {
+        provider = allowedProviders.find(p => p.key === forcedProviderKey);
+        if (!provider) {
+          console.warn(`⚠️  Provider forcé (${forcedProviderKey}) non disponible pour ce plan, routage normal.`);
+          provider = pickOptimalProvider(intent, allowedProviders, plan, isInCheapMode);
+        } else {
+          console.log(`✅ Provider forcé sélectionné: ${provider.name}`);
+        }
       } else {
-        console.log(`✅ Provider forcé sélectionné: ${provider.name}`);
+        provider = pickOptimalProvider(intent, allowedProviders, plan, isInCheapMode);
+        console.log('✅ Selected provider:', provider.name);
       }
-    } else {
-      provider = pickOptimalProvider(intent, allowedProviders, plan, isInCheapMode);
-      console.log('✅ Selected provider:', provider.name);
-    }
 
-    // Optimize prompt based on mode
-    const optimizedMessage = optimizePrompt(cleanedMessage, intent, plan, isInCheapMode);
-    console.log('📝 Prompt optimized for', isInCheapMode ? 'efficiency' : 'quality');
+      // Optimize prompt based on mode
+      const optimizedMessage = optimizePrompt(cleanedMessage, intent, plan, isInCheapMode);
+      console.log('📝 Prompt optimized for', isInCheapMode ? 'efficiency' : 'quality');
 
-    // Web search if needed
-    let enhancedMessage = optimizedMessage;
-    let searchResults = null;
+      // Web search if needed
+      let enhancedMessage = optimizedMessage;
+      let searchResults = null;
 
-    if (allowWebSearch && intent.requiresWebSearch) {
+      if (allowWebSearch && intent.requiresWebSearch) {
+        try {
+          console.log('🔍 Performing web search...');
+          const results = await webSearchService.search(cleanedMessage);
+          searchResults = results;
+          const formattedResults = webSearchService.formatResultsForContext(results.results);
+          enhancedMessage = `${optimizedMessage}\n\n## Web Search Results:\n${formattedResults}`;
+          console.log('✅ Web search completed');
+        } catch (error) {
+          console.error('⚠️  Web search failed:', error);
+        }
+      }
+
+      // Generate response
+      console.log('🤔 Generating response with', provider.name, '...');
+      const response = await provider.connector.generateResponse(enhancedMessage);
+      console.log('✨ Response received - Length:', response.content.length, 'chars');
+
+      // Track cost
+      const dailyCost = trackCost(user.userId || user.email, response.costUSD);
+      const monthlyBudget = getUserMonthlyBudget(plan);
+      const remainingBudget = monthlyBudget - dailyCost;
+
+      console.log(`💳 Cost: $${response.costUSD.toFixed(4)} | Daily: $${dailyCost.toFixed(2)} | Budget remaining: $${remainingBudget.toFixed(2)}`);
+      console.log('====== ✅ MESSAGE ROUTING END ======\n');
+
+      return {
+        response: response.content,
+        aiUsed: provider.name,
+        providerKey: provider.key,
+        intent,
+        costUSD: response.costUSD,
+        chargedUSD: provider.priceUSD,
+        webSearchUsed: !!searchResults,
+        webSearchResults: searchResults,
+        planUsed: plan,
+        optimizationApplied: true,
+        mode: isInCheapMode ? 'SMART_ROUTING' : 'PREMIUM',
+        requestCount: currentRequestCount + 1,
+        totalLimit: totalLimit,
+        dailyCost: dailyCost,
+        remainingBudget: remainingBudget,
+        tokensUsed: response.tokensUsed || 0
+      };
+    },
+
+    // Ajout d'une fonction pour router vers Ollama si aucune API externe
+    async handleMessageLocal({ message, user, image, imageUrl, searchWeb, requestCount, conversationHistory }: any) {
+      const intent = analyzeIntentAdvanced(message);
+      let optimizedMessage = optimizePrompt(message, intent, user?.plan || 'FREE', true);
+      const model = image ? 'llava' : 'llama3';
+      // Prompt amélioré pour des réponses longues, détaillées, pédagogiques et compréhensives
+      if (model === 'llama3') {
+        optimizedMessage = `Réponds en français, de façon claire, très détaillée, pédagogique, structurée et compréhensible, sans inventer de sources ni d'instructions. Donne une réponse longue et complète, avec des exemples si possible. ${optimizedMessage}`;
+      } else if (model === 'llava') {
+        optimizedMessage = `Analyse l'image fournie et réponds en français, de façon claire, très détaillée, pédagogique, structurée et compréhensible. Donne une réponse longue et complète, avec des exemples si possible. ${optimizedMessage}`;
+      }
+
+      // Ajout du contexte conversationnel (mémoire courte)
+      // On récupère les 6 derniers messages (3 échanges complets user/assistant)
+      let contextHistory = '';
+      // Utilise l'historique de la conversation courante si fourni (prioritaire)
+      if (conversationHistory && Array.isArray(conversationHistory)) {
+        const lastMessages = conversationHistory.slice(-6); // 3 échanges complets
+        for (const msg of lastMessages) {
+          contextHistory += `\n[${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}]: ${msg.content}`;
+        }
+      } else if (user && user.conversationHistory && Array.isArray(user.conversationHistory)) {
+        // fallback éventuel (rare)
+        const lastMessages = user.conversationHistory.slice(-6);
+        for (const msg of lastMessages) {
+          contextHistory += `\n[${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}]: ${msg.content}`;
+        }
+      }
+      if (contextHistory) {
+        // Reformate le contexte comme un historique de chat, puis la question, puis une consigne unique
+        optimizedMessage = `${contextHistory}\n\n[Utilisateur]: ${message}\n\nINSTRUCTION ULTRA-IMPORTANTE :\n1. Si la question est vague, incomplète ou hors contexte, tu dois AUTOMATIQUEMENT faire une synthèse, approfondir ou poursuivre sur le dernier sujet discuté dans l'historique ci-dessus.\n2. Tu n'as PAS LE DROIT de répondre "je ne comprends pas" ou de demander de reformuler.\n3. Relie toujours ta réponse au dernier sujet, même si la question est floue.\n4. Ne répète pas l'historique, mais exploite-le pour donner une réponse cohérente, pertinente et CONTINUE.\n`;
+      } else {
+        optimizedMessage = `[Utilisateur]: ${message}\n`;
+      }
+      // Ajout d'une consigne pour s'adapter au style de l'utilisateur
+      if (user && user.profile && user.profile.style) {
+        optimizedMessage = `Adapte ta façon de répondre au style suivant : ${user.profile.style}. ${optimizedMessage}`;
+      }
+
+      // Ajout d'une consigne pour que l'IA réponde d'abord comme un assistant humain, demande une précision si la question est vague, et ne donne une réponse technique que si c'est pertinent.
+      optimizedMessage = `Tu es un assistant conversationnel pour le grand public. Si la question est vague, ambiguë ou ressemble à une salutation, commence par répondre de façon humaine, naturelle et amicale, puis demande une précision si besoin avant de donner une réponse technique. Ne donne une réponse technique détaillée que si la question est claire et précise. ${optimizedMessage}`;
+
+      // Consigne spéciale pour les IA connues
+      optimizedMessage = `Si l'utilisateur demande si tu connais une IA connue (ex : ChatGPT, Gemini, Claude, Mistral, Bard, etc.), réponds clairement que tu connais, explique brièvement ce que c'est, puis propose d'en dire plus si besoin. ${optimizedMessage}`;
+
+      // Consigne pour donner des réponses à jour
+      optimizedMessage = `Si la question concerne une technologie, une IA ou un événement, précise la date de tes connaissances (ex : "À ma connaissance en 2026...") et indique si tu n'es pas à jour. Si tu connais une mise à jour récente, mentionne-la. ${optimizedMessage}`;
+
+      // Ajoute la date du jour dans chaque prompt pour que l'IA la reprenne dans sa réponse
+      const today = new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+      optimizedMessage = `Nous sommes le ${today}. ${optimizedMessage}`;
+
+      // Supprime toute consigne ou contexte qui forcerait l'IA à saluer systématiquement
+      // Ajoute une consigne explicite pour NE PAS saluer systématiquement
+      optimizedMessage = `Ne commence jamais ta réponse par une salutation comme Bonjour, Salut, Coucou, Comment allez-vous, etc., sauf si l'utilisateur te salue explicitement. ${optimizedMessage}`;
+
       try {
-        console.log('🔍 Performing web search...');
-        const results = await webSearchService.search(cleanedMessage);
-        searchResults = results;
-        const formattedResults = webSearchService.formatResultsForContext(results.results);
-        enhancedMessage = `${optimizedMessage}\n\n## Web Search Results:\n${formattedResults}`;
-        console.log('✅ Web search completed');
-      } catch (error) {
-        console.error('⚠️  Web search failed:', error);
+        let response = await ollamaGenerate(optimizedMessage, model);
+        // Post-traitement : suppression des salutations automatiques en début de réponse
+        if (typeof response === 'string') {
+          response = response.replace(/^(\s*)(bonjour|salut|coucou|hello|bonsoir|hey|bienvenue|\s*[,!\-–—]*)+/i, '').trimStart();
+        }
+        const disclaimer = '\n\n⚠️ Réponse générée par une IA locale (phase gratuite/bêta) : les informations peuvent être inexactes ou datées, et l’IA n’a pas accès à Internet.';
+        return {
+          response: (typeof response === 'string' ? response : String(response)) + disclaimer,
+          aiUsed: 'Phi-3',
+          providerKey: 'phi3-local',
+          intent,
+          costUSD: 0,
+          chargedUSD: 0,
+          webSearchUsed: false,
+          webSearchResults: null,
+          planUsed: user?.plan || 'FREE',
+          optimizationApplied: true,
+          mode: 'LOCAL',
+          requestCount: requestCount + 1,
+          totalLimit: 0,
+          dailyCost: 0,
+          remainingBudget: 0,
+          tokensUsed: (typeof response === 'string' ? response.length : 0)
+        };
+      } catch (err) {
+        console.error('❌ Erreur lors de l’appel à Ollama :', err);
+        throw err;
+      }
+
+      // Si une image est jointe, utiliser le modèle vision (llava)
+      if (image) {
+        const visionModel = 'llava';
+        const response = await ollamaGenerateWithImage(optimizedMessage, image, visionModel);
+        const disclaimer = '\n\n⚠️ Réponse générée par une IA locale (vision, phase gratuite/bêta) : les informations peuvent être inexactes ou datées, et l’IA n’a pas accès à Internet.';
+        return {
+          response: (typeof response === 'string' ? response : String(response)) + disclaimer,
+          aiUsed: 'LLaVA (Ollama)',
+          providerKey: 'llava-local',
+          intent,
+          costUSD: 0,
+          chargedUSD: 0,
+          webSearchUsed: false,
+          webSearchResults: null,
+          planUsed: user?.plan || 'FREE',
+          optimizationApplied: true,
+          mode: 'LOCAL',
+          requestCount: requestCount + 1,
+          totalLimit: 0,
+          dailyCost: 0,
+          remainingBudget: 0,
+          tokensUsed: (typeof response === 'string' ? response.length : 0)
+        };
       }
     }
-
-    // Generate response
-    console.log('🤔 Generating response with', provider.name, '...');
-    const response = await provider.connector.generateResponse(enhancedMessage);
-    console.log('✨ Response received - Length:', response.content.length, 'chars');
-
-    // Track cost
-    const dailyCost = trackCost(user.userId || user.email, response.costUSD);
-    const monthlyBudget = getUserMonthlyBudget(plan);
-    const remainingBudget = monthlyBudget - dailyCost;
-
-    console.log(`💳 Cost: $${response.costUSD.toFixed(4)} | Daily: $${dailyCost.toFixed(2)} | Budget remaining: $${remainingBudget.toFixed(2)}`);
-    console.log('====== ✅ MESSAGE ROUTING END ======\n');
-
-    return {
-      response: response.content,
-      aiUsed: provider.name,
-      providerKey: provider.key,
-      intent,
-      costUSD: response.costUSD,
-      chargedUSD: provider.priceUSD,
-      webSearchUsed: !!searchResults,
-      webSearchResults: searchResults,
-      planUsed: plan,
-      optimizationApplied: true,
-      mode: isInCheapMode ? 'SMART_ROUTING' : 'PREMIUM',
-      requestCount: currentRequestCount + 1,
-      totalLimit: totalLimit,
-      dailyCost: dailyCost,
-      remainingBudget: remainingBudget,
-      tokensUsed: response.tokensUsed || 0
-    };
-  },
-
-  // Ajout d'une fonction pour router vers Ollama si aucune API externe
-  async handleMessageLocal({ message, user, image, imageUrl, searchWeb, requestCount, conversationHistory }: any) {
-    const intent = analyzeIntentAdvanced(message);
-    let optimizedMessage = optimizePrompt(message, intent, user?.plan || 'FREE', true);
-
-    // Use Mixtral or Mistral as default if available, otherwise fallback to llama3
-    // For now, we will ask for 'mistral' model from Ollama which usually maps to Mistral 7B or Mixtral 8x7B depending on user setup
-    // We intentionally include 'llama3' in the logic for future/fallback support
-    let model = image ? 'llava' : 'mistral';
-
-    // Fallback logic (unused currently but keeps the type broad enough for the checks below)
-    if (!image && process.env.DEFAULT_LOCAL_MODEL === 'llama3') {
-      model = 'llama3';
-    }
-
-    console.log(`🧠 Local Inference using model: ${model}`);
-
-    // Prompt amélioré pour des réponses longues, détaillées, pédagogiques et compréhensives
-    if (model === 'mistral' || model === 'mixtral') {
-      optimizedMessage = `Tu es une IA sophistiquée basée sur Mixtral 7B/8x7B. Réponds TOUJOURS en français. Sois très précis, nuancé et exhaustif. Tes réponses doivent être bien structurées (titres, listes à puces). ${optimizedMessage}`;
-    } else if (model === 'llama3') {
-      optimizedMessage = `Tu es un assistant IA expert, compétent, et détaillé. Réponds TOUJOURS en français, de manière très claire, structurée, pédagogique et compréhensible, sans inventer de sources ni d'instructions. Donne TOUJOURS une réponse longue, détaillée et complète, avec des exemples concrets si possible. Sois professionnel et utile. ${optimizedMessage}`;
-    } else if (model === 'llava') {
-      optimizedMessage = `Analyse l'image fournie et réponds en français, de façon claire, très détaillée, pédagogique, structurée et compréhensible. Donne une réponse longue et complète, avec des exemples si possible. ${optimizedMessage}`;
-    }
-
-    // Ajout du contexte conversationnel (mémoire courte)
-    // On récupère les 12 derniers messages (6 échanges complets user/assistant) pour meilleure mémorisation
-    let contextHistory = '';
-    // Utilise l'historique de la conversation courante si fourni (prioritaire)
-    if (conversationHistory && Array.isArray(conversationHistory)) {
-      const lastMessages = conversationHistory.slice(-12); // 6 échanges complets (augmenté de 6 à 12)
-      for (const msg of lastMessages) {
-        contextHistory += `\n[${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}]: ${msg.content}`;
-      }
-    } else if (user && user.conversationHistory && Array.isArray(user.conversationHistory)) {
-      // fallback éventuel (rare)
-      const lastMessages = user.conversationHistory.slice(-12);
-      for (const msg of lastMessages) {
-        contextHistory += `\n[${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}]: ${msg.content}`;
-      }
-    }
-    if (contextHistory) {
-      // Reformate le contexte comme un historique de chat, puis la question, puis une consigne unique
-      optimizedMessage = `HISTORIQUE DE LA CONVERSATION ACTUELLE:\n${contextHistory}\n\n[Utilisateur]: ${message}\n\nINSTRUCTION CRITIQUE POUR MISTRAL:\n1. Tu DOIS absolument te souvenir de TOUS les sujets précédents discutés dans l'historique ci-dessus.\n2. Si l'utilisateur dit "dis-moi en plus", "continue", "explique davantage", tu dois CONTINUER DIRECTEMENT sur le sujet précédent sans faire d'introduction générique.\n3. Tu n'as PAS LE DROIT de répondre de manière générique ou de demander une clarification si la question concerne le sujet précédent.\n4. Si la question est vague ou courte (comme "dis moi en plus"), relie-la TOUJOURS au dernier sujet important discuté dans l'historique.\n5. Donne une réponse APPROFONDIE et DÉTAILLÉE qui poursuit directement le fil de la conversation.\n6. Ne répète pas ce que tu as déjà dit, mais ajoute des informations NOUVELLES et COMPLÉMENTAIRES.\n`;
-    } else {
-      optimizedMessage = `[Utilisateur]: ${message}\n`;
-    }
-    // Ajout d'une consigne pour s'adapter au style de l'utilisateur
-    if (user && user.profile && user.profile.style) {
-      optimizedMessage = `Adapte ta façon de répondre au style suivant : ${user.profile.style}. ${optimizedMessage}`;
-    }
-
-    // Ajout d'une consigne pour que l'IA réponde d'abord comme un assistant humain, demande une précision si la question est vague, et ne donne une réponse technique que si c'est pertinent.
-    optimizedMessage = `Tu es un assistant conversationnel pour le grand public. Si la question est vague, ambiguë ou ressemble à une salutation, commence par répondre de façon humaine, naturelle et amicale, puis demande une précision si besoin avant de donner une réponse technique. Ne donne une réponse technique détaillée que si la question est claire et précise. ${optimizedMessage}`;
-
-    // Consigne spéciale pour les IA connues
-    optimizedMessage = `Si l'utilisateur demande si tu connais une IA connue (ex : ChatGPT, Gemini, Claude, Mistral, Bard, etc.), réponds clairement que tu connais, explique brièvement ce que c'est, puis propose d'en dire plus si besoin. ${optimizedMessage}`;
-
-    // Consigne pour donner des réponses à jour
-    optimizedMessage = `Si la question concerne une technologie, une IA ou un événement, précise la date de tes connaissances (ex : "À ma connaissance en 2026...") et indique si tu n'es pas à jour. Si tu connais une mise à jour récente, mentionne-la. ${optimizedMessage}`;
-
-    // Ajoute la date du jour dans chaque prompt pour que l'IA la reprenne dans sa réponse
-    const today = new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
-    optimizedMessage = `Nous sommes le ${today}. ${optimizedMessage}`;
-
-    // Supprime toute consigne ou contexte qui forcerait l'IA à saluer systématiquement
-    // Ajoute une consigne explicite pour NE PAS saluer systématiquement
-    optimizedMessage = `Ne commence jamais ta réponse par une salutation comme Bonjour, Salut, Coucou, Comment allez-vous, etc., sauf si l'utilisateur te salue explicitement. ${optimizedMessage}`;
-
-    try {
-      let response = await ollamaGenerate(optimizedMessage, model);
-      // Post-traitement : suppression des salutations automatiques en début de réponse
-      if (typeof response === 'string') {
-        response = response.replace(/^(\s*)(bonjour|salut|coucou|hello|bonsoir|hey|bienvenue|\s*[,!\-–—]*)+/i, '').trimStart();
-      }
-      const disclaimer = '\n\n⚠️ Réponse générée par Llama 3 (Ollama local, phase gratuite/bêta) : les informations peuvent être inexactes ou datées, et l\'IA n\'a pas accès à Internet.';
-      return {
-        response: (typeof response === 'string' ? response : String(response)) + disclaimer,
-        aiUsed: 'Llama 3 (Local)',
-        providerKey: 'llama3-local',
-        intent,
-        costUSD: 0,
-        chargedUSD: 0,
-        webSearchUsed: false,
-        webSearchResults: null,
-        planUsed: user?.plan || 'FREE',
-        optimizationApplied: true,
-        mode: 'LOCAL',
-        requestCount: requestCount + 1,
-        totalLimit: 0,
-        dailyCost: 0,
-        remainingBudget: 0,
-        tokensUsed: (typeof response === 'string' ? response.length : 0)
-      };
-    } catch (err) {
-      console.error('❌ Erreur lors de l’appel à Ollama :', err);
-      throw err;
-    }
-
-    // Si une image est jointe, utiliser le modèle vision (llava)
-    if (image) {
-      const visionModel = 'llava';
-      const response = await ollamaGenerateWithImage(optimizedMessage, image, visionModel);
-      const disclaimer = '\n\n⚠️ Réponse générée par une IA locale (vision, phase gratuite/bêta) : les informations peuvent être inexactes ou datées, et l’IA n’a pas accès à Internet.';
-      return {
-        response: (typeof response === 'string' ? response : String(response)) + disclaimer,
-        aiUsed: 'LLaVA (Ollama)',
-        providerKey: 'llava-local',
-        intent,
-        costUSD: 0,
-        chargedUSD: 0,
-        webSearchUsed: false,
-        webSearchResults: null,
-        planUsed: user?.plan || 'FREE',
-        optimizationApplied: true,
-        mode: 'LOCAL',
-        requestCount: requestCount + 1,
-        totalLimit: 0,
-        dailyCost: 0,
-        remainingBudget: 0,
-        tokensUsed: (typeof response === 'string' ? response.length : 0)
-      };
-    }
-  }
 };

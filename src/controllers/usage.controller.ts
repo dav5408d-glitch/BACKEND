@@ -1,4 +1,6 @@
-import { prisma } from '../config/database';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export const usageController = {
   getDaily: async (req: any, res: any) => {

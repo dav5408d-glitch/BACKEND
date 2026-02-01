@@ -1,43 +1,45 @@
 import fetch from 'node-fetch';
 
-// Configuration pour Ollama local ou distant
-const OLLAMA_BASE_URL = process.env.OLLAMA_HOST || 'http://localhost:11434';
-
-export async function ollamaGenerate(prompt: string, model: string = 'mixtral') {
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+export async function ollamaGenerate(prompt: string, model: string = 'phi3') {
+  const response = await fetch('http://localhost:11434/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt, stream: false })
+    body: JSON.stringify({ model, prompt, stream: true })
   });
   if (!response.ok) {
     throw new Error('Ollama API error: ' + response.statusText);
   }
-  const data = await response.json();
-  return data.response;
-}
-
-export async function ollamaChat(messages: Array<{ role: string, content: string }>, model: string = 'mixtral') {
-  console.log(`🤖 Sending chat request to Ollama (${model}) with ${messages.length} messages`);
-  console.log(`🌐 Ollama URL: ${OLLAMA_BASE_URL}`);
-
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages, stream: false })
+  return new Promise((resolve, reject) => {
+    let result = '';
+    let buffer = '';
+    response.body.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const obj = JSON.parse(line);
+            if (obj.response) result += obj.response;
+          } catch (e) {
+            // ignore parse errors for incomplete lines
+          }
+        }
+      }
+    });
+    response.body.on('end', () => {
+      resolve(result.trim());
+    });
+    response.body.on('error', (err) => {
+      reject(err);
+    });
   });
-
-  if (!response.ok) {
-    throw new Error(`Ollama API error: ${response.statusText} (${OLLAMA_BASE_URL})`);
-  }
-
-  const data = await response.json();
-  return data.message.content;
 }
 
 // Envoi d'une image à Ollama (vision)
 export async function ollamaGenerateWithImage(prompt: string, imageBase64: string, model: string = 'llava') {
   // imageBase64 doit être sans préfixe data:image/png;base64,
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+  const response = await fetch('http://localhost:11434/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -52,18 +54,4 @@ export async function ollamaGenerateWithImage(prompt: string, imageBase64: strin
   }
   const data = await response.json();
   return data.response || data.message || '[Aucune réponse reçue]';
-}
-
-// Vérifier si Ollama est accessible
-export async function checkOllamaHealth() {
-  try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
-      method: 'GET',
-      timeout: 5000
-    });
-    return response.ok;
-  } catch (error: any) {
-    console.error('❌ Ollama health check failed:', error.message);
-    return false;
-  }
 }
