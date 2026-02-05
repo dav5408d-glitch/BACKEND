@@ -1,5 +1,8 @@
 import fetch from 'node-fetch';
 
+// @ts-ignore
+
+
 export async function ollamaGenerate(prompt: string, model: string = 'phi3') {
   const response = await fetch('http://localhost:11434/api/generate', {
     method: 'POST',
@@ -12,7 +15,7 @@ export async function ollamaGenerate(prompt: string, model: string = 'phi3') {
   return new Promise((resolve, reject) => {
     let result = '';
     let buffer = '';
-    response.body.on('data', (chunk) => {
+    response.body.on('data', (chunk: any) => {
       buffer += chunk.toString();
       let lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -30,7 +33,7 @@ export async function ollamaGenerate(prompt: string, model: string = 'phi3') {
     response.body.on('end', () => {
       resolve(result.trim());
     });
-    response.body.on('error', (err) => {
+    response.body.on('error', (err: any) => {
       reject(err);
     });
   });

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ollamaGenerate = ollamaGenerate;
 exports.ollamaGenerateWithImage = ollamaGenerateWithImage;
 const node_fetch_1 = __importDefault(require("node-fetch"));
+// @ts-ignore
 async function ollamaGenerate(prompt, model = 'phi3') {
     const response = await (0, node_fetch_1.default)('http://localhost:11434/api/generate', {
         method: 'POST',

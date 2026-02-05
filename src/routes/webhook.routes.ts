@@ -39,7 +39,7 @@ interface LemonSqueezyEvent {
   };
 }
 
-router.post('/lemon-squeezy', async (req, res) => {
+router.post('/lemon-squeezy', async (req: any, res: any) => {
   try {
     const event: LemonSqueezyEvent = req.body;
     const eventName = event.meta.event_name;
