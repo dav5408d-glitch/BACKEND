@@ -1,0 +1,4 @@
+# Render Configuration
+node_version = "22.22.0"
+build_command = "npm run render-build"
+start_command = "npm start"
