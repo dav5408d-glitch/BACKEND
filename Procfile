@@ -1,1 +1,1 @@
-web: npm run render-build && npm start
+web: cmd /c render-build.bat && npm start
